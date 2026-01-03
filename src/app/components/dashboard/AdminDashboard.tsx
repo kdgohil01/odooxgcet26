@@ -10,55 +10,152 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
+import { useState, useEffect } from "react";
+import { getEmployees } from "../../utils/employeeStorage";
+import { getLeaveData } from "../../utils/leaveStorage";
+import { getAllAttendanceRecords } from "../../utils/attendanceStorage";
+import { calculatePayrollSummary } from "../../utils/payrollStorage";
 
 interface AdminDashboardProps {
   onNavigate: (view: string) => void;
 }
 
 export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
-  const stats = [
+  const [stats, setStats] = useState([
     {
       label: "Total Employees",
-      value: "247",
+      value: "0",
       icon: Users,
-      change: "+12 this month",
+      change: "+0 this month",
       trend: "up"
     },
     {
       label: "Present Today",
-      value: "231",
+      value: "0",
       icon: Clock,
-      change: "93.5% attendance",
+      change: "0% attendance",
       trend: "up"
     },
     {
       label: "Pending Leave Requests",
-      value: "8",
+      value: "0",
       icon: Calendar,
       change: "Requires attention",
       trend: "neutral"
     },
     {
       label: "Payroll Due",
-      value: "$589K",
+      value: "$0",
       icon: TrendingUp,
-      change: "Processing Jan 15",
+      change: "Processing",
       trend: "neutral"
     },
-  ];
+  ]);
 
-  const pendingLeaveRequests = [
-    { id: 1, employee: "Sarah Johnson", department: "Engineering", dates: "Jan 10-12, 2026", days: 3, type: "Annual" },
-    { id: 2, employee: "Michael Chen", department: "Marketing", dates: "Jan 15, 2026", days: 1, type: "Sick" },
-    { id: 3, employee: "Emily Davis", department: "Sales", dates: "Feb 1-5, 2026", days: 5, type: "Annual" },
-    { id: 4, employee: "Robert Taylor", department: "HR", dates: "Jan 20, 2026", days: 1, type: "Personal" },
-  ];
+  const [pendingLeaveRequests, setPendingLeaveRequests] = useState<any[]>([]);
+  const [recentEmployees, setRecentEmployees] = useState<any[]>([]);
+  const [departmentOverview, setDepartmentOverview] = useState<any[]>([]);
 
-  const recentEmployees = [
-    { name: "Jennifer Wilson", department: "Engineering", joined: "Jan 2, 2026", status: "Active" },
-    { name: "David Brown", department: "Sales", joined: "Dec 28, 2025", status: "Active" },
-    { name: "Lisa Anderson", department: "Marketing", joined: "Dec 20, 2025", status: "Active" },
-  ];
+  // Load all dynamic data
+  useEffect(() => {
+    // Get employees
+    const employees = getEmployees();
+    
+    // Get attendance records
+    const attendanceRecords = getAllAttendanceRecords();
+    const today = new Date().toISOString().split('T')[0];
+    const presentToday = attendanceRecords.filter(record => 
+      record.date === today && record.status === 'Present'
+    ).length;
+    
+    // Get leave requests
+    const leaveData = getLeaveData();
+    const pendingLeaves = leaveData.leaveRequests.filter(request => 
+      request.status === 'pending'
+    );
+    
+    // Get payroll summary
+    const payrollSummary = calculatePayrollSummary();
+    
+    // Calculate new hires this month
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const newHires = employees.filter(emp => {
+      const joinDate = new Date(emp.joinDate);
+      return joinDate.getMonth() === currentMonth && joinDate.getFullYear() === currentYear;
+    });
+
+    // Update stats
+    setStats([
+      {
+        label: "Total Employees",
+        value: employees.length.toString(),
+        icon: Users,
+        change: `+${newHires.length} this month`,
+        trend: newHires.length > 0 ? "up" : "neutral"
+      },
+      {
+        label: "Present Today",
+        value: presentToday.toString(),
+        icon: Clock,
+        change: `${employees.length > 0 ? Math.round((presentToday / employees.length) * 100) : 0}% attendance`,
+        trend: "up"
+      },
+      {
+        label: "Pending Leave Requests",
+        value: pendingLeaves.length.toString(),
+        icon: Calendar,
+        change: pendingLeaves.length > 0 ? "Requires attention" : "All clear",
+        trend: pendingLeaves.length > 0 ? "neutral" : "up"
+      },
+      {
+        label: "Payroll Due",
+        value: `$${Math.round(payrollSummary.totalNetPayroll / 1000)}K`,
+        icon: TrendingUp,
+        change: `Processing ${payrollSummary.processingDate}`,
+        trend: "neutral"
+      },
+    ]);
+
+    // Set pending leave requests
+    setPendingLeaveRequests(pendingLeaves.slice(0, 5)); // Show only first 5
+
+    // Set recent employees (new hires)
+    setRecentEmployees(newHires.slice(0, 3).map(emp => ({
+      name: emp.name,
+      department: emp.department,
+      joined: emp.joinDate,
+      status: "Active"
+    })));
+
+    // Calculate department overview
+    const deptMap = new Map();
+    employees.forEach(emp => {
+      if (!deptMap.has(emp.department)) {
+        deptMap.set(emp.department, { total: 0, present: 0 });
+      }
+      const dept = deptMap.get(emp.department);
+      dept.total++;
+    });
+
+    // Calculate attendance per department
+    attendanceRecords.forEach(record => {
+      if (record.date === today && deptMap.has(record.department)) {
+        const dept = deptMap.get(record.department);
+        if (record.status === 'Present') {
+          dept.present++;
+        }
+      }
+    });
+
+    const deptOverview = Array.from(deptMap.entries()).map(([name, data]) => ({
+      name,
+      count: data.total,
+      attendance: data.total > 0 ? Math.round((data.present / data.total) * 100) : 0
+    }));
+
+    setDepartmentOverview(deptOverview);
+  }, []);
 
   return (
     <div className="p-8 space-y-6">
@@ -106,23 +203,31 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pendingLeaveRequests.map((request) => (
-              <TableRow key={request.id}>
-                <TableCell>{request.employee}</TableCell>
-                <TableCell>{request.department}</TableCell>
-                <TableCell>{request.dates}</TableCell>
-                <TableCell>{request.days}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{request.type}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button size="sm" variant="outline" onClick={() => onNavigate('admin-leave')}>Approve</Button>
-                    <Button size="sm" variant="outline" onClick={() => onNavigate('admin-leave')}>Reject</Button>
-                  </div>
+            {pendingLeaveRequests.length > 0 ? (
+              pendingLeaveRequests.map((request) => (
+                <TableRow key={request.id}>
+                  <TableCell>{request.employee}</TableCell>
+                  <TableCell>{request.department}</TableCell>
+                  <TableCell>{request.dates}</TableCell>
+                  <TableCell>{request.days}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{request.type}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => onNavigate('admin-leave')}>Approve</Button>
+                      <Button size="sm" variant="outline" onClick={() => onNavigate('admin-leave')}>Reject</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  No pending leave requests
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </Card>
@@ -132,23 +237,27 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         <Card className="p-6">
           <h3 className="mb-4 text-foreground">Recent Hires</h3>
           <div className="space-y-4">
-            {recentEmployees.map((employee, index) => (
-              <div key={index} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                    {employee.name.charAt(0)}
+            {recentEmployees.length > 0 ? (
+              recentEmployees.map((employee, index) => (
+                <div key={index} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                      {employee.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm text-foreground">{employee.name}</p>
+                      <p className="text-xs text-muted-foreground">{employee.department}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-foreground">{employee.name}</p>
-                    <p className="text-xs text-muted-foreground">{employee.department}</p>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">{employee.joined}</p>
+                    <Badge variant="secondary" className="mt-1">{employee.status}</Badge>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">{employee.joined}</p>
-                  <Badge variant="secondary" className="mt-1">{employee.status}</Badge>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-muted-foreground text-center">No recent hires</p>
+            )}
           </div>
         </Card>
 
@@ -156,24 +265,22 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
         <Card className="p-6">
           <h3 className="mb-4 text-foreground">Department Overview</h3>
           <div className="space-y-4">
-            {[
-              { name: "Engineering", count: 89, attendance: "95%" },
-              { name: "Sales", count: 54, attendance: "91%" },
-              { name: "Marketing", count: 32, attendance: "94%" },
-              { name: "HR", count: 18, attendance: "100%" },
-              { name: "Operations", count: 54, attendance: "88%" },
-            ].map((dept, index) => (
-              <div key={index} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-                <div>
-                  <p className="text-sm text-foreground">{dept.name}</p>
-                  <p className="text-xs text-muted-foreground">{dept.count} employees</p>
+            {departmentOverview.length > 0 ? (
+              departmentOverview.map((dept, index) => (
+                <div key={index} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                  <div>
+                    <p className="text-sm text-foreground">{dept.name}</p>
+                    <p className="text-xs text-muted-foreground">{dept.count} employees</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-foreground">{dept.attendance}%</p>
+                    <p className="text-xs text-muted-foreground">Attendance</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-foreground">{dept.attendance}</p>
-                  <p className="text-xs text-muted-foreground">Attendance</p>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-muted-foreground text-center">No department data available</p>
+            )}
           </div>
         </Card>
       </div>

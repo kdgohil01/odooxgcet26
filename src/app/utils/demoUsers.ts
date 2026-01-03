@@ -14,7 +14,7 @@ export function initializeDemoUsers(): void {
     }
   }
 
-  // Create demo users
+  // Create demo users - only the two specified accounts
   const demoUsers: User[] = [
     {
       employeeId: 'EMP001',
@@ -28,27 +28,6 @@ export function initializeDemoUsers(): void {
       email: 'admin@dayflow.com',
       password: 'Admin123!',
       role: 'HR',
-      verified: true
-    },
-    {
-      employeeId: 'EMP002',
-      email: 'john.smith@dayflow.com',
-      password: 'Password123!',
-      role: 'Employee',
-      verified: true
-    },
-    {
-      employeeId: 'HR002',
-      email: 'jane.doe@dayflow.com',
-      password: 'Password123!',
-      role: 'HR',
-      verified: true
-    },
-    {
-      employeeId: 'EMP003',
-      email: 'hem@dayflow.com',
-      password: 'Hem123!',
-      role: 'Employee',
       verified: true
     }
   ];
@@ -80,24 +59,6 @@ export function getDemoCredentials(): Array<{ email: string; password: string; r
       password: 'Admin123!',
       role: 'Admin/HR',
       description: 'Demo Admin Account'
-    },
-    {
-      email: 'john.smith@dayflow.com',
-      password: 'Password123!',
-      role: 'Employee',
-      description: 'Additional Employee Account'
-    },
-    {
-      email: 'jane.doe@dayflow.com',
-      password: 'Password123!',
-      role: 'Admin/HR',
-      description: 'Additional Admin Account'
-    },
-    {
-      email: 'hem@dayflow.com',
-      password: 'Hem123!',
-      role: 'Employee',
-      description: 'Test User Account'
     }
   ];
 }

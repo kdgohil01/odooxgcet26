@@ -20,11 +20,10 @@ import {
   SelectValue,
 } from "../ui/select";
 import { toast } from "sonner";
-import { PayrollDetailsDialog } from "./PayrollDetailsDialog";
 import { SalaryStructureDialog } from "./SalaryStructureDialog";
+import { PayrollDetailsDialog } from "./PayrollDetailsDialog";
 import { 
   getAllEmployeePayroll, 
-  getEmployeePayroll, 
   updateSalaryStructure, 
   type EnhancedPayrollRecord 
 } from "../../utils/payrollStorage";
@@ -74,28 +73,59 @@ export function AdminPayroll() {
         return acc;
       }, {});
       
-      setDepartmentPayroll(Object.entries(deptData).map(([dept, data]: [string, any]) => ({
+      const deptPayroll = Object.entries(deptData).map(([dept, data]: [string, any]) => ({
         department: dept,
         ...data
-      })));
+      }));
+      
+      setDepartmentPayroll(deptPayroll);
     } catch (error) {
       console.error('Error loading payroll data:', error);
       toast.error("Failed to load payroll data");
-      // Set fallback data
-      setEmployeePayroll([]);
-      setPayrollSummary({
-        totalEmployees: 0,
-        totalGrossPayroll: 0,
-        totalDeductions: 0,
-        totalNetPayroll: 0,
-        processingDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-      });
-      setDepartmentPayroll([]);
     }
   }, []);
 
+  // Filter payroll data
+  const filteredPayroll = employeePayroll.filter(record => {
+    const matchesSearch = !searchTerm || 
+      record.employee.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.position.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesDepartment = departmentFilter === "all" || 
+      record.department.toLowerCase() === departmentFilter.toLowerCase();
+    
+    const matchesStatus = statusFilter === "all" || 
+      record.status.toLowerCase() === statusFilter.toLowerCase();
+    
+    return matchesSearch && matchesDepartment && matchesStatus;
+  });
+
   const handleExportReport = () => {
-    toast.success("Exporting payroll report...");
+    const csvContent = [
+      ['Employee', 'Department', 'Position', 'Gross Salary', 'Deductions', 'Net Salary', 'Status'],
+      ...filteredPayroll.map(record => [
+        record.employee,
+        record.department,
+        record.position,
+        record.gross.toString(),
+        (record.deductions.tax + record.deductions.insurance + record.deductions.providentFund + record.deductions.other).toString(),
+        record.net.toString(),
+        record.status
+      ])
+    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payroll_report_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    toast.success("Payroll report exported successfully");
   };
 
   const handleProcessPayroll = () => {
@@ -107,17 +137,12 @@ export function AdminPayroll() {
     setIsDetailsDialogOpen(true);
   };
 
-  const handleSalaryStructureUpdate = (record: EnhancedPayrollRecord) => {
+  const handleSalaryStructureEdit = (record: EnhancedPayrollRecord) => {
     setSelectedPayrollRecord(record);
     setIsSalaryStructureDialogOpen(true);
   };
 
-  const handleSalaryStructureClose = () => {
-    setIsSalaryStructureDialogOpen(false);
-    setSelectedPayrollRecord(null);
-  };
-
-  const handleSalaryStructureUpdated = () => {
+  const handleSalaryStructureUpdate = () => {
     // Refresh payroll data
     const updatedPayroll = getAllEmployeePayroll();
     setEmployeePayroll(updatedPayroll);
@@ -132,75 +157,21 @@ export function AdminPayroll() {
     };
     setPayrollSummary(summary);
     
-    // Recalculate department breakdown
-    const deptData = updatedPayroll.reduce((acc: any, record) => {
-      const dept = record.department;
-      if (!acc[dept]) {
-        acc[dept] = { count: 0, totalGross: 0, totalNet: 0 };
-      }
-      acc[dept].count++;
-      acc[dept].totalGross += record.gross;
-      acc[dept].totalNet += record.net;
-      return acc;
-    }, {});
-    
-    setDepartmentPayroll(Object.entries(deptData).map(([dept, data]: [string, any]) => ({
-      department: dept,
-      ...data
-    })));
-    
     toast.success("Salary structure updated successfully");
   };
 
-  const refreshData = () => {
-    try {
-      const updatedPayroll = getAllEmployeePayroll();
-      setEmployeePayroll(updatedPayroll);
-      
-      // Calculate summary
-      const summary = {
-        totalEmployees: updatedPayroll.length,
-        totalGrossPayroll: updatedPayroll.reduce((sum, record) => sum + record.gross, 0),
-        totalDeductions: updatedPayroll.reduce((sum, record) => sum + (record.deductions.tax + record.deductions.insurance + record.deductions.providentFund + record.deductions.other), 0),
-        totalNetPayroll: updatedPayroll.reduce((sum, record) => sum + record.net, 0),
-        processingDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-      };
-      setPayrollSummary(summary);
-      
-      // Recalculate department breakdown
-      const deptData = updatedPayroll.reduce((acc: any, record) => {
-        const dept = record.department;
-        if (!acc[dept]) {
-          acc[dept] = { count: 0, totalGross: 0, totalNet: 0 };
-        }
-        acc[dept].count++;
-        acc[dept].totalGross += record.gross;
-        acc[dept].totalNet += record.net;
-        return acc;
-      }, {});
-      
-      setDepartmentPayroll(Object.entries(deptData).map(([dept, data]: [string, any]) => ({
-        department: dept,
-        ...data
-      })));
-      
-      toast.success("Payroll data refreshed");
-    } catch (error) {
-      console.error('Error refreshing payroll data:', error);
-      toast.error('Failed to refresh payroll data');
-    }
+  const handleDetailsClose = () => {
+    setIsDetailsDialogOpen(false);
+    setSelectedPayrollRecord(null);
   };
 
-  // Filter logic for employee payroll
-  const filteredEmployeePayroll = employeePayroll.filter(record => {
-    const matchesSearch = record.employee.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         record.position.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = departmentFilter === "all" || 
-                             record.department.toLowerCase() === departmentFilter.toLowerCase();
-    const matchesStatus = statusFilter === "all" || record.status === statusFilter;
-    
-    return matchesSearch && matchesDepartment && matchesStatus;
-  });
+  const handleSalaryStructureClose = () => {
+    setIsSalaryStructureDialogOpen(false);
+    setSelectedPayrollRecord(null);
+  };
+
+  // Get unique departments for filter
+  const departments = Array.from(new Set(employeePayroll.map(record => record.department)));
 
   return (
     <div className="p-8 space-y-6">
@@ -208,15 +179,12 @@ export function AdminPayroll() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-foreground">Payroll Summary - January 2026</h3>
+            <h3 className="text-foreground">Payroll Summary - {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}</h3>
             <p className="text-sm text-muted-foreground mt-1">
               Processing Date: {payrollSummary.processingDate}
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={refreshData}>
-              Refresh Data
-            </Button>
             <Button variant="outline" onClick={handleExportReport}>
               <Download className="w-4 h-4 mr-2" />
               Export Report
@@ -229,25 +197,25 @@ export function AdminPayroll() {
           <div className="p-4 bg-muted rounded">
             <p className="text-sm text-muted-foreground">Total Employees</p>
             <p className="text-2xl text-foreground mt-2">
-              {payrollSummary.totalEmployees}
+              {payrollSummary.totalEmployees || 0}
             </p>
           </div>
           <div className="p-4 bg-muted rounded">
             <p className="text-sm text-muted-foreground">Total Gross</p>
             <p className="text-2xl text-foreground mt-2">
-              ${payrollSummary.totalGrossPayroll.toLocaleString()}
+              ${(payrollSummary.totalGrossPayroll || 0).toLocaleString()}
             </p>
           </div>
           <div className="p-4 bg-muted rounded">
             <p className="text-sm text-muted-foreground">Total Deductions</p>
             <p className="text-2xl text-foreground mt-2">
-              ${payrollSummary.totalDeductions.toLocaleString()}
+              ${(payrollSummary.totalDeductions || 0).toLocaleString()}
             </p>
           </div>
           <div className="p-4 bg-primary/10 rounded">
             <p className="text-sm text-primary">Total Net</p>
             <p className="text-2xl text-primary mt-2">
-              ${payrollSummary.totalNetPayroll.toLocaleString()}
+              ${(payrollSummary.totalNetPayroll || 0).toLocaleString()}
             </p>
           </div>
         </div>
@@ -270,10 +238,10 @@ export function AdminPayroll() {
             {departmentPayroll.map((dept, index) => (
               <TableRow key={index}>
                 <TableCell>{dept.department}</TableCell>
-                <TableCell>{dept.employees}</TableCell>
-                <TableCell>${dept.totalGross.toLocaleString()}</TableCell>
-                <TableCell>${dept.totalNet.toLocaleString()}</TableCell>
-                <TableCell>${Math.round(dept.totalNet / dept.employees).toLocaleString()}</TableCell>
+                <TableCell>{dept.count}</TableCell>
+                <TableCell>${(dept.totalGross || 0).toLocaleString()}</TableCell>
+                <TableCell>${(dept.totalNet || 0).toLocaleString()}</TableCell>
+                <TableCell>${dept.count > 0 ? Math.round((dept.totalNet || 0) / dept.count).toLocaleString() : 0}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -287,10 +255,10 @@ export function AdminPayroll() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search by employee name or position..."
-                className="pl-10"
+                placeholder="Search by employee name or ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
               />
             </div>
           </div>
@@ -300,11 +268,11 @@ export function AdminPayroll() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
-              <SelectItem value="engineering">Engineering</SelectItem>
-              <SelectItem value="sales">Sales</SelectItem>
-              <SelectItem value="marketing">Marketing</SelectItem>
-              <SelectItem value="hr">HR</SelectItem>
-              <SelectItem value="operations">Operations</SelectItem>
+              {departments.map(dept => (
+                <SelectItem key={dept} value={dept.toLowerCase()}>
+                  {dept}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -315,6 +283,7 @@ export function AdminPayroll() {
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="processed">Processed</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="na">NA</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -322,7 +291,7 @@ export function AdminPayroll() {
 
       {/* Employee Payroll Table */}
       <Card className="p-6">
-        <h3 className="mb-4 text-foreground">Employee Payroll Details ({filteredEmployeePayroll.length})</h3>
+        <h3 className="mb-4 text-foreground">Employee Payroll Details ({filteredPayroll.length})</h3>
         <Table>
           <TableHeader>
             <TableRow>
@@ -337,53 +306,41 @@ export function AdminPayroll() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredEmployeePayroll.length > 0 ? (
-              filteredEmployeePayroll.map((record) => (
-                <TableRow key={record.id}>
-                  <TableCell>{record.employee}</TableCell>
-                  <TableCell>{record.department}</TableCell>
-                  <TableCell>{record.position}</TableCell>
-                  <TableCell>${record.gross.toLocaleString()}</TableCell>
-                  <TableCell>${record.deductions.toLocaleString()}</TableCell>
-                  <TableCell>${record.net.toLocaleString()}</TableCell>
-                  <TableCell>
-                    {record.status === 'processed' ? (
-                      <Badge className="bg-green-50 text-green-700 border-green-200">
-                        Processed
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-orange-50 text-orange-700 border-orange-200">
-                        Pending
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleViewDetails(record)}
-                      className="mr-2"
-                    >
-                      View Details
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleSalaryStructureUpdate(record)}
-                      disabled={record.status === 'NA'}
-                    >
+            {filteredPayroll.map((record) => (
+              <TableRow key={record.id}>
+                <TableCell>{record.employee}</TableCell>
+                <TableCell>{record.department}</TableCell>
+                <TableCell>{record.position}</TableCell>
+                <TableCell>${record.gross.toLocaleString()}</TableCell>
+                <TableCell>${(record.deductions.tax + record.deductions.insurance + record.deductions.providentFund + record.deductions.other).toLocaleString()}</TableCell>
+                <TableCell>${record.net.toLocaleString()}</TableCell>
+                <TableCell>
+                  {record.status === 'processed' ? (
+                    <Badge className="bg-green-50 text-green-700 border-green-200">
+                      Processed
+                    </Badge>
+                  ) : record.status === 'NA' ? (
+                    <Badge className="bg-gray-50 text-gray-700 border-gray-200">
+                      NA
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-orange-50 text-orange-700 border-orange-200">
+                      Pending
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button variant="outline" size="sm" onClick={() => handleViewDetails(record)} className="mr-2">
+                    View Details
+                  </Button>
+                  {record.status !== 'NA' && (
+                    <Button variant="outline" size="sm" onClick={() => handleSalaryStructureEdit(record)}>
                       <Edit className="w-4 h-4" />
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No payroll records found matching your criteria
+                  )}
                 </TableCell>
               </TableRow>
-            )}
+            ))}
           </TableBody>
         </Table>
       </Card>
@@ -395,26 +352,26 @@ export function AdminPayroll() {
           <div>
             <h4 className="text-foreground">Payroll Processing Notice</h4>
             <p className="text-sm text-muted-foreground mt-1">
-              2 employees have pending payroll items that require review before processing.
-              Ensure all data is verified before the {payrollSummary.processingDate} deadline.
+              {employeePayroll.filter(r => r.status === 'pending').length} employees have pending payroll items that require review before processing.
+              Ensure all data is verified before the deadline.
             </p>
           </div>
         </div>
       </Card>
+
+      {/* Payroll Details Dialog */}
+      <PayrollDetailsDialog
+        isOpen={isDetailsDialogOpen}
+        onClose={handleDetailsClose}
+        payrollRecord={selectedPayrollRecord}
+      />
 
       {/* Salary Structure Dialog */}
       <SalaryStructureDialog
         isOpen={isSalaryStructureDialogOpen}
         onClose={handleSalaryStructureClose}
         payrollRecord={selectedPayrollRecord}
-        onUpdate={handleSalaryStructureUpdated}
-      />
-
-      {/* Payroll Details Dialog */}
-      <PayrollDetailsDialog
-        isOpen={isDetailsDialogOpen}
-        onClose={() => setIsDetailsDialogOpen(false)}
-        payrollRecord={selectedPayrollRecord}
+        onUpdate={handleSalaryStructureUpdate}
       />
     </div>
   );

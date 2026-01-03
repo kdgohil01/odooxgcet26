@@ -19,102 +19,110 @@ import {
   SelectValue,
 } from "../ui/select";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { getEmployees, type Employee } from "../../utils/employeeStorage";
+import { AddEmployeeDialog } from "./AddEmployeeDialog";
+import { EmployeeDetailDialog } from "./EmployeeDetailDialog";
 
 export function EmployeeList() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+
+  // Load employees from storage
+  useEffect(() => {
+    const loadedEmployees = getEmployees();
+    setEmployees(loadedEmployees);
+    setFilteredEmployees(loadedEmployees);
+  }, []);
+
+  // Filter employees based on search and filters
+  useEffect(() => {
+    let filtered = employees;
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(emp => 
+        emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        emp.id.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Department filter
+    if (departmentFilter !== "all") {
+      filtered = filtered.filter(emp => emp.department.toLowerCase() === departmentFilter.toLowerCase());
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(emp => emp.status.toLowerCase() === statusFilter.toLowerCase());
+    }
+
+    setFilteredEmployees(filtered);
+  }, [employees, searchTerm, departmentFilter, statusFilter]);
+
+  // Calculate dynamic stats
+  const totalEmployees = employees.length;
+  const activeEmployees = employees.filter(emp => emp.status === 'active').length;
+  const onLeaveEmployees = employees.filter(emp => emp.status === 'on_leave').length;
+  const newThisMonth = employees.filter(emp => {
+    const joinDate = new Date(emp.joinDate);
+    const now = new Date();
+    return joinDate.getMonth() === now.getMonth() && joinDate.getFullYear() === now.getFullYear();
+  }).length;
+
   const handleExport = () => {
-    toast.success("Exporting employee list...");
+    const csvContent = [
+      ['Employee ID', 'Name', 'Department', 'Position', 'Email', 'Phone', 'Join Date', 'Status'],
+      ...filteredEmployees.map(emp => [
+        emp.id,
+        emp.name,
+        emp.department,
+        emp.position,
+        emp.email,
+        emp.phone,
+        emp.joinDate,
+        emp.status
+      ])
+    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `employee_list_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    toast.success("Employee list exported successfully");
   };
 
   const handleAddEmployee = () => {
-    toast.info("Add employee dialog opened");
+    setIsAddDialogOpen(true);
   };
 
-  const handleViewDetails = (employeeName: string) => {
-    toast.info(`Viewing details for ${employeeName}`);
+  const handleViewDetails = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    setIsDetailDialogOpen(true);
   };
 
-  const employees = [
-    { 
-      id: "EMP-001", 
-      name: "Sarah Johnson", 
-      department: "Engineering", 
-      position: "Senior Developer",
-      email: "sarah.j@company.com",
-      phone: "+1 (555) 101-1001",
-      joinDate: "Mar 15, 2023",
-      status: "active" 
-    },
-    { 
-      id: "EMP-002", 
-      name: "Michael Chen", 
-      department: "Marketing", 
-      position: "Marketing Manager",
-      email: "michael.c@company.com",
-      phone: "+1 (555) 102-1002",
-      joinDate: "Jan 10, 2022",
-      status: "active" 
-    },
-    { 
-      id: "EMP-003", 
-      name: "Emily Davis", 
-      department: "Sales", 
-      position: "Sales Executive",
-      email: "emily.d@company.com",
-      phone: "+1 (555) 103-1003",
-      joinDate: "Jun 20, 2023",
-      status: "active" 
-    },
-    { 
-      id: "EMP-004", 
-      name: "Robert Taylor", 
-      department: "HR", 
-      position: "HR Specialist",
-      email: "robert.t@company.com",
-      phone: "+1 (555) 104-1004",
-      joinDate: "Sep 5, 2021",
-      status: "active" 
-    },
-    { 
-      id: "EMP-005", 
-      name: "Jennifer Wilson", 
-      department: "Engineering", 
-      position: "Junior Developer",
-      email: "jennifer.w@company.com",
-      phone: "+1 (555) 105-1005",
-      joinDate: "Jan 2, 2026",
-      status: "active" 
-    },
-    { 
-      id: "EMP-006", 
-      name: "David Brown", 
-      department: "Sales", 
-      position: "Sales Representative",
-      email: "david.b@company.com",
-      phone: "+1 (555) 106-1006",
-      joinDate: "Dec 28, 2025",
-      status: "active" 
-    },
-    { 
-      id: "EMP-007", 
-      name: "Lisa Anderson", 
-      department: "Marketing", 
-      position: "Content Specialist",
-      email: "lisa.a@company.com",
-      phone: "+1 (555) 107-1007",
-      joinDate: "Dec 20, 2025",
-      status: "active" 
-    },
-    { 
-      id: "EMP-008", 
-      name: "James Miller", 
-      department: "Operations", 
-      position: "Operations Manager",
-      email: "james.m@company.com",
-      phone: "+1 (555) 108-1008",
-      joinDate: "Apr 12, 2020",
-      status: "active" 
-    },
-  ];
+  const handleEmployeeAdded = (newEmployee: Omit<Employee, 'id'>) => {
+    // Refresh the employee list
+    const updatedEmployees = getEmployees();
+    setEmployees(updatedEmployees);
+    setFilteredEmployees(updatedEmployees);
+  };
+
+  // Get unique departments for filter
+  const departments = Array.from(new Set(employees.map(emp => emp.department)));
 
   return (
     <div className="p-8 space-y-6">
@@ -122,19 +130,19 @@ export function EmployeeList() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">Total Employees</p>
-          <p className="text-3xl text-foreground mt-2">247</p>
+          <p className="text-3xl text-foreground mt-2">{totalEmployees}</p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">Active</p>
-          <p className="text-3xl text-foreground mt-2">245</p>
+          <p className="text-3xl text-foreground mt-2">{activeEmployees}</p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">On Leave</p>
-          <p className="text-3xl text-foreground mt-2">2</p>
+          <p className="text-3xl text-foreground mt-2">{onLeaveEmployees}</p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">New This Month</p>
-          <p className="text-3xl text-foreground mt-2">12</p>
+          <p className="text-3xl text-foreground mt-2">{newThisMonth}</p>
         </Card>
       </div>
 
@@ -146,24 +154,26 @@ export function EmployeeList() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name, email, or employee ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
           </div>
-          <Select defaultValue="all">
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Department" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
-              <SelectItem value="engineering">Engineering</SelectItem>
-              <SelectItem value="sales">Sales</SelectItem>
-              <SelectItem value="marketing">Marketing</SelectItem>
-              <SelectItem value="hr">HR</SelectItem>
-              <SelectItem value="operations">Operations</SelectItem>
+              {departments.map(dept => (
+                <SelectItem key={dept} value={dept.toLowerCase()}>
+                  {dept}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <Select defaultValue="active">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -171,6 +181,7 @@ export function EmployeeList() {
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="on_leave">On Leave</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={handleExport}>
@@ -186,7 +197,7 @@ export function EmployeeList() {
 
       {/* Employee Table */}
       <Card className="p-6">
-        <h3 className="mb-4 text-foreground">All Employees</h3>
+        <h3 className="mb-4 text-foreground">All Employees ({filteredEmployees.length})</h3>
         <Table>
           <TableHeader>
             <TableRow>
@@ -202,7 +213,7 @@ export function EmployeeList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {employees.map((employee) => (
+            {filteredEmployees.map((employee) => (
               <TableRow key={employee.id}>
                 <TableCell>{employee.id}</TableCell>
                 <TableCell>
@@ -219,12 +230,16 @@ export function EmployeeList() {
                 <TableCell>{employee.phone}</TableCell>
                 <TableCell>{employee.joinDate}</TableCell>
                 <TableCell>
-                  <Badge className="bg-green-50 text-green-700 border-green-200">
-                    {employee.status}
+                  <Badge className={
+                    employee.status === 'active' ? "bg-green-50 text-green-700 border-green-200" :
+                    employee.status === 'on_leave' ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                    "bg-red-50 text-red-700 border-red-200"
+                  }>
+                    {employee.status.replace('_', ' ').toUpperCase()}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="outline" size="sm" onClick={() => handleViewDetails(employee.name)}>
+                  <Button variant="outline" size="sm" onClick={() => handleViewDetails(employee)}>
                     View Details
                   </Button>
                 </TableCell>
@@ -233,6 +248,20 @@ export function EmployeeList() {
           </TableBody>
         </Table>
       </Card>
+
+      {/* Add Employee Dialog */}
+      <AddEmployeeDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onEmployeeAdded={handleEmployeeAdded}
+      />
+
+      {/* Employee Detail Dialog */}
+      <EmployeeDetailDialog
+        open={isDetailDialogOpen}
+        onOpenChange={setIsDetailDialogOpen}
+        employee={selectedEmployee}
+      />
     </div>
   );
 }

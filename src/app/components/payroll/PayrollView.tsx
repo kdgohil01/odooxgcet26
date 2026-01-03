@@ -3,7 +3,7 @@ import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
-import { Download, DollarSign, Search } from "lucide-react";
+import { Download, DollarSign, Search, AlertCircle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -34,7 +34,7 @@ export function PayrollView() {
   // Get employee payroll data (read-only for employees)
   const employeePayroll = getEmployeePayroll(currentUser?.employeeId || '');
   
-  // Get current payroll record for display
+  // Get current payroll record for display with safe defaults
   const currentPayroll: EnhancedPayrollRecord = employeePayroll || {
     id: 0,
     employeeId: '',
@@ -65,9 +65,7 @@ export function PayrollView() {
     lastUpdated: ''
   };
 
-  const handleDownloadPayslip = (period?: string, record?: any) => {
-    const payrollData = record || currentPayroll;
-    
+  const handleDownloadPayslip = () => {
     // Calculate breakdown
     const grossSalary = currentPayroll.gross;
     const totalDeductions = currentPayroll.deductions.tax + 
@@ -84,26 +82,56 @@ export function PayrollView() {
     const otherDeductions = totalDeductions - tax - insurance - pension;
 
     const payslipData: PayslipData = {
-      employeeName: employeePayroll.employee,
-      employeeId: employeePayroll.employeeId,
-      department: employeePayroll.department,
-      position: employeePayroll.position,
-      email: employeePayroll.email,
-      month: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      gross: employeePayroll.gross,
-      basicSalary: employeePayroll.salaryStructure.basic,
-      housingAllowance: employeePayroll.salaryStructure.housing,
-      transportAllowance: employeePayroll.salaryStructure.transport,
-      otherAllowances: employeePayroll.salaryStructure.other,
-      tax: employeePayroll.deductions.tax,
-      insurance: employeePayroll.deductions.insurance,
-      pension: employeePayroll.deductions.providentFund,
-      otherDeductions: employeePayroll.deductions.other,
-      netSalary: employeePayroll.net
+      employeeName: currentPayroll.employee,
+      employeeId: currentPayroll.employeeId,
+      department: currentPayroll.department,
+      position: currentPayroll.position,
+      email: currentPayroll.email,
+      phone: currentPayroll.phone,
+      payPeriod: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      payDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+      grossSalary: currentPayroll.gross,
+      deductions: {
+        basicSalary: currentPayroll.salaryStructure.basic,
+        housingAllowance: currentPayroll.salaryStructure.housing,
+        transportAllowance: currentPayroll.salaryStructure.transport,
+        otherAllowances: currentPayroll.salaryStructure.other,
+        tax: currentPayroll.deductions.tax,
+        insurance: currentPayroll.deductions.insurance,
+        pension: currentPayroll.deductions.providentFund,
+        otherDeductions: currentPayroll.deductions.other,
+        totalDeductions: totalDeductions
+      },
+      netSalary: currentPayroll.net,
+      yearToDate: {
+        gross: currentPayroll.gross,
+        deductions: totalDeductions,
+        net: currentPayroll.net
+      }
     };
     
     generatePayslipPDF(payslipData);
     toast.success("Payslip downloaded successfully");
+  };
+
+  const handleDownloadTaxDoc = (docName: string) => {
+    // Generate tax document (mock implementation)
+    const taxData: TaxDocumentData = {
+      employeeName: currentPayroll.employee,
+      employeeId: currentPayroll.employeeId,
+      taxYear: docName.includes('2025') ? '2025' : '2024',
+      totalIncome: currentPayroll.gross * 12, // Annual income
+      taxableIncome: currentPayroll.gross * 12 * 0.8, // 80% of gross is taxable
+      taxPaid: currentPayroll.deductions.tax * 12, // Annual tax
+      employerDetails: {
+        name: "DayFlow Company",
+        address: "123 Business St, San Francisco, CA 94105",
+        ein: "12-3456789"
+      }
+    };
+    
+    generateTaxDocumentPDF(taxData);
+    toast.success(`${docName} downloaded successfully`);
   };
 
   const filteredRecords = employeePayroll ? [employeePayroll] : [];
@@ -118,7 +146,7 @@ export function PayrollView() {
           </p>
         </div>
         
-        {employeePayroll.status === 'NA' && (
+        {currentPayroll.status === 'NA' && (
           <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-6">
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
@@ -132,38 +160,38 @@ export function PayrollView() {
           </div>
         )}
 
-        {employeePayroll.status !== 'NA' && (
+        {currentPayroll.status !== 'NA' && (
           <>
             {/* Payroll Summary */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Basic Salary</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.salaryStructure.basic.toLocaleString()}
+                  ${currentPayroll.salaryStructure.basic.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Housing Allowance</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.salaryStructure.housing.toLocaleString()}
+                  ${currentPayroll.salaryStructure.housing.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Transport Allowance</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.salaryStructure.transport.toLocaleString()}
+                  ${currentPayroll.salaryStructure.transport.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Other Allowances</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.salaryStructure.other.toLocaleString()}
+                  ${currentPayroll.salaryStructure.other.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-primary/10 rounded-lg">
                 <p className="text-sm text-primary">Total Gross</p>
                 <p className="text-2xl text-primary">
-                  ${employeePayroll.gross.toLocaleString()}
+                  ${currentPayroll.gross.toLocaleString()}
                 </p>
               </div>
             </div>
@@ -173,31 +201,31 @@ export function PayrollView() {
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Tax</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.deductions.tax.toLocaleString()}
+                  ${currentPayroll.deductions.tax.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Insurance</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.deductions.insurance.toLocaleString()}
+                  ${currentPayroll.deductions.insurance.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">Provident Fund</p>
                 <p className="text-2xl text-foreground">
-                  ${employeePayroll.deductions.providentFund.toLocaleString()}
+                  ${currentPayroll.deductions.providentFund.toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-red-700">Total Deductions</p>
                 <p className="text-2xl text-red-700">
-                  ${(employeePayroll.deductions.tax + employeePayroll.deductions.insurance + employeePayroll.deductions.providentFund + employeePayroll.deductions.other).toLocaleString()}
+                  ${(currentPayroll.deductions.tax + currentPayroll.deductions.insurance + currentPayroll.deductions.providentFund + currentPayroll.deductions.other).toLocaleString()}
                 </p>
               </div>
               <div className="p-4 bg-primary/10 rounded-lg">
                 <p className="text-sm text-primary">Net Salary</p>
                 <p className="text-2xl text-primary">
-                  ${employeePayroll.net.toLocaleString()}
+                  ${currentPayroll.net.toLocaleString()}
                 </p>
               </div>
             </div>
