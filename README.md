@@ -125,6 +125,7 @@ npm run dev
 📄 License & Attributions
 
 ✔ See ATTRIBUTIONS.md for third-party library credits.
+
 ✔ You can add a LICENSE file to apply an official license.
 
 --------------------------------------------------
