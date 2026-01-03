@@ -116,7 +116,7 @@ npm run dev
 ✔ You can add a LICENSE file to apply an official license.
 
 --------------------------------------------------
-📞 Contact
+📞 Contact info
 
 For questions or support, contact:
 
