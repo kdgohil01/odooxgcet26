@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "./components/layout/Navigation";
 import { Header } from "./components/layout/Header";
 import { EmployeeDashboard } from "./components/dashboard/EmployeeDashboard";
@@ -11,12 +11,44 @@ import { AdminLeaveManagement } from "./components/leave/AdminLeaveManagement";
 import { PayrollView } from "./components/payroll/PayrollView";
 import { AdminPayroll } from "./components/payroll/AdminPayroll";
 import { EmployeeList } from "./components/employees/EmployeeList";
-import { Button } from "./components/ui/button";
+import { LoginWrapper } from "./components/auth/LoginWrapper";
 import { Toaster } from "./components/ui/sonner";
+import { LeaveProvider } from "./context/LeaveContext";
+import { ProfileProvider } from "./context/ProfileContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { 
+  saveCurrentView, 
+  getCurrentView, 
+  saveUserRole, 
+  getUserRole, 
+  validateViewForRole 
+} from "./utils/navigationPersistence";
 
-export default function App() {
-  const [userRole, setUserRole] = useState<'employee' | 'admin'>('employee');
+function AppContent() {
+  const { isAuthenticated, userRole, logout } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
+
+  // Initialize navigation state from localStorage on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Load saved current view and validate it for the role
+      const savedView = getCurrentView();
+      const validView = validateViewForRole(savedView, userRole);
+      setCurrentView(validView);
+    }
+  }, [isAuthenticated, userRole]);
+
+  // Save current view to localStorage whenever it changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      saveCurrentView(currentView);
+    }
+  }, [currentView, isAuthenticated]);
+
+  const handleNavigate = (view: string) => {
+    const validView = validateViewForRole(view, userRole);
+    setCurrentView(validView);
+  };
 
   const getPageTitle = () => {
     const titles: Record<string, string> = {
@@ -30,7 +62,7 @@ export default function App() {
       'admin-attendance': 'Attendance Management',
       'admin-leave': 'Leave Management',
       'admin-payroll': 'Payroll Management',
-      'admin-profile': 'Settings',
+      'admin-profile': 'Profile',
     };
     return titles[currentView] || 'Dashboard';
   };
@@ -39,7 +71,7 @@ export default function App() {
     if (userRole === 'employee') {
       switch (currentView) {
         case 'dashboard':
-          return <EmployeeDashboard onNavigate={setCurrentView} />;
+          return <EmployeeDashboard onNavigate={handleNavigate} />;
         case 'profile':
           return <EmployeeProfile />;
         case 'attendance':
@@ -49,12 +81,12 @@ export default function App() {
         case 'payroll':
           return <PayrollView />;
         default:
-          return <EmployeeDashboard onNavigate={setCurrentView} />;
+          return <EmployeeDashboard onNavigate={handleNavigate} />;
       }
     } else {
       switch (currentView) {
         case 'admin-dashboard':
-          return <AdminDashboard onNavigate={setCurrentView} />;
+          return <AdminDashboard onNavigate={handleNavigate} />;
         case 'employees':
           return <EmployeeList />;
         case 'admin-attendance':
@@ -66,63 +98,53 @@ export default function App() {
         case 'admin-profile':
           return <EmployeeProfile />;
         default:
-          return <AdminDashboard onNavigate={setCurrentView} />;
+          return <AdminDashboard onNavigate={handleNavigate} />;
       }
     }
   };
 
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginWrapper onLoginSuccess={() => {}} />;
+  }
+
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <Toaster />
-      {/* Role Switcher - Demo purposes */}
-      <div className="bg-card border-b border-border px-6 py-2 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Demo Mode: Switch between employee and admin views</p>
-        <div className="flex gap-2">
-          <Button 
-            variant={userRole === 'employee' ? 'default' : 'outline'} 
-            size="sm"
-            onClick={() => {
-              setUserRole('employee');
-              setCurrentView('dashboard');
-            }}
-          >
-            Employee View
-          </Button>
-          <Button 
-            variant={userRole === 'admin' ? 'default' : 'outline'} 
-            size="sm"
-            onClick={() => {
-              setUserRole('admin');
-              setCurrentView('admin-dashboard');
-            }}
-          >
-            Admin View
-          </Button>
-        </div>
-      </div>
+    <ProfileProvider>
+      <LeaveProvider>
+        <div className="h-screen flex flex-col bg-background">
+          <Toaster />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Navigation */}
-        <div className="w-64 flex-shrink-0">
-          <Navigation 
-            currentView={currentView} 
-            onNavigate={setCurrentView} 
-            userRole={userRole}
-          />
-        </div>
+          <div className="flex-1 flex overflow-hidden">
+            {/* Sidebar Navigation */}
+            <div className="w-64 flex-shrink-0">
+              <Navigation 
+                currentView={currentView} 
+                onNavigate={handleNavigate} 
+                userRole={userRole}
+              />
+            </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header 
-            title={getPageTitle()} 
-            userName={userRole === 'admin' ? 'Admin User' : 'John Smith'}
-          />
-          
-          <main className="flex-1 overflow-y-auto">
-            {renderContent()}
-          </main>
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <Header 
+                title={getPageTitle()} 
+              />
+              
+              <main className="flex-1 overflow-y-auto">
+                {renderContent()}
+              </main>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </LeaveProvider>
+    </ProfileProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

@@ -28,79 +28,56 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { toast } from "sonner";
+import { useLeaveContext } from "../../context/LeaveContext";
 
 export function AdminLeaveManagement() {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [adminComment, setAdminComment] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const { leaveRequests, recentDecisions, approveLeaveRequest, rejectLeaveRequest } = useLeaveContext();
 
   const handleApprove = () => {
-    toast.success(`Leave request for ${selectedRequest?.employee} approved`);
+    if (!selectedRequest) return;
+    
+    approveLeaveRequest(selectedRequest.id);
+    toast.success(`Leave request for ${selectedRequest.employee} approved`);
     setSelectedRequest(null);
     setAdminComment("");
   };
 
   const handleReject = () => {
-    toast.error(`Leave request for ${selectedRequest?.employee} rejected`);
+    if (!selectedRequest) return;
+    
+    rejectLeaveRequest(selectedRequest.id);
+    toast.error(`Leave request for ${selectedRequest.employee} rejected`);
     setSelectedRequest(null);
     setAdminComment("");
   };
 
-  const leaveRequests = [
-    { 
-      id: 1, 
-      employee: "Sarah Johnson", 
-      department: "Engineering", 
-      type: "Annual", 
-      dates: "Jan 10-12, 2026", 
-      days: 3, 
-      status: "pending",
-      appliedOn: "Dec 28, 2025",
-      reason: "Family vacation planned for new year",
-      balance: { total: 20, used: 5, available: 15 }
-    },
-    { 
-      id: 2, 
-      employee: "Michael Chen", 
-      department: "Marketing", 
-      type: "Sick", 
-      dates: "Jan 15, 2026", 
-      days: 1, 
-      status: "pending",
-      appliedOn: "Jan 2, 2026",
-      reason: "Medical appointment",
-      balance: { total: 10, used: 1, available: 9 }
-    },
-    { 
-      id: 3, 
-      employee: "Emily Davis", 
-      department: "Sales", 
-      type: "Annual", 
-      dates: "Feb 1-5, 2026", 
-      days: 5, 
-      status: "pending",
-      appliedOn: "Dec 20, 2025",
-      reason: "Attending wedding out of state",
-      balance: { total: 20, used: 8, available: 12 }
-    },
-    { 
-      id: 4, 
-      employee: "Robert Taylor", 
-      department: "HR", 
-      type: "Personal", 
-      dates: "Jan 20, 2026", 
-      days: 1, 
-      status: "pending",
-      appliedOn: "Jan 1, 2026",
-      reason: "Personal matters to attend to",
-      balance: { total: 5, used: 0, available: 5 }
-    },
-  ];
+  // Filter logic for leave requests
+  const filteredLeaveRequests = leaveRequests.filter(request => {
+    const matchesSearch = request.employee.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         request.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         request.dates.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDepartment = departmentFilter === "all" || 
+                             request.department.toLowerCase() === departmentFilter.toLowerCase();
+    const matchesStatus = statusFilter === "all" || request.status === statusFilter;
+    
+    return matchesSearch && matchesDepartment && matchesStatus;
+  });
 
-  const recentDecisions = [
-    { employee: "Jennifer Wilson", type: "Annual", dates: "Dec 20-24, 2025", days: 5, status: "approved", decidedOn: "Dec 1, 2025" },
-    { employee: "David Brown", type: "Sick", dates: "Dec 15, 2025", days: 1, status: "approved", decidedOn: "Dec 15, 2025" },
-    { employee: "Lisa Anderson", type: "Personal", dates: "Jan 8, 2026", days: 1, status: "rejected", decidedOn: "Dec 30, 2025" },
-  ];
+  // Filter logic for recent decisions
+  const filteredRecentDecisions = recentDecisions.filter(decision => {
+    const matchesSearch = decision.employee.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         decision.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         decision.dates.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || decision.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -121,15 +98,25 @@ export function AdminLeaveManagement() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">Pending Requests</p>
-          <p className="text-3xl text-foreground mt-2">8</p>
+          <p className="text-3xl text-foreground mt-2">{leaveRequests.length}</p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">Approved This Month</p>
-          <p className="text-3xl text-foreground mt-2">24</p>
+          <p className="text-3xl text-foreground mt-2">
+            {recentDecisions.filter(d => d.status === 'approved' && 
+              new Date(d.decidedOn).getMonth() === new Date().getMonth() && 
+              new Date(d.decidedOn).getFullYear() === new Date().getFullYear()
+            ).length}
+          </p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">Rejected This Month</p>
-          <p className="text-3xl text-foreground mt-2">3</p>
+          <p className="text-3xl text-foreground mt-2">
+            {recentDecisions.filter(d => d.status === 'rejected' && 
+              new Date(d.decidedOn).getMonth() === new Date().getMonth() && 
+              new Date(d.decidedOn).getFullYear() === new Date().getFullYear()
+            ).length}
+          </p>
         </Card>
         <Card className="p-6">
           <p className="text-sm text-muted-foreground">On Leave Today</p>
@@ -144,12 +131,14 @@ export function AdminLeaveManagement() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search by employee name..."
+                placeholder="Search by employee name, leave type, or dates..."
                 className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
-          <Select defaultValue="all">
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Department" />
             </SelectTrigger>
@@ -159,9 +148,10 @@ export function AdminLeaveManagement() {
               <SelectItem value="sales">Sales</SelectItem>
               <SelectItem value="marketing">Marketing</SelectItem>
               <SelectItem value="hr">HR</SelectItem>
+              <SelectItem value="operations">Operations</SelectItem>
             </SelectContent>
           </Select>
-          <Select defaultValue="pending">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -177,7 +167,7 @@ export function AdminLeaveManagement() {
 
       {/* Pending Leave Requests */}
       <Card className="p-6">
-        <h3 className="mb-4 text-foreground">Pending Leave Requests</h3>
+        <h3 className="mb-4 text-foreground">Pending Leave Requests ({filteredLeaveRequests.length})</h3>
         <Table>
           <TableHeader>
             <TableRow>
@@ -191,36 +181,44 @@ export function AdminLeaveManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leaveRequests.map((request) => (
-              <TableRow key={request.id}>
-                <TableCell>{request.employee}</TableCell>
-                <TableCell>{request.department}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{request.type}</Badge>
-                </TableCell>
-                <TableCell>{request.dates}</TableCell>
-                <TableCell>{request.days}</TableCell>
-                <TableCell>{request.appliedOn}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => setSelectedRequest(request)}
-                    >
-                      Review
-                    </Button>
-                  </div>
+            {filteredLeaveRequests.length > 0 ? (
+              filteredLeaveRequests.map((request) => (
+                <TableRow key={request.id}>
+                  <TableCell>{request.employee}</TableCell>
+                  <TableCell>{request.department}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{request.type}</Badge>
+                  </TableCell>
+                  <TableCell>{request.dates}</TableCell>
+                  <TableCell>{request.days}</TableCell>
+                  <TableCell>{request.appliedOn}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => setSelectedRequest(request)}
+                      >
+                        Review
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  No pending leave requests found matching your criteria
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </Card>
 
       {/* Recent Decisions */}
       <Card className="p-6">
-        <h3 className="mb-4 text-foreground">Recent Decisions</h3>
+        <h3 className="mb-4 text-foreground">Recent Decisions ({filteredRecentDecisions.length})</h3>
         <Table>
           <TableHeader>
             <TableRow>
@@ -233,18 +231,26 @@ export function AdminLeaveManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recentDecisions.map((decision, index) => (
-              <TableRow key={index}>
-                <TableCell>{decision.employee}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{decision.type}</Badge>
+            {filteredRecentDecisions.length > 0 ? (
+              filteredRecentDecisions.map((decision, index) => (
+                <TableRow key={index}>
+                  <TableCell>{decision.employee}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{decision.type}</Badge>
+                  </TableCell>
+                  <TableCell>{decision.dates}</TableCell>
+                  <TableCell>{decision.days}</TableCell>
+                  <TableCell>{decision.decidedOn}</TableCell>
+                  <TableCell>{getStatusBadge(decision.status)}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  No recent decisions found matching your criteria
                 </TableCell>
-                <TableCell>{decision.dates}</TableCell>
-                <TableCell>{decision.days}</TableCell>
-                <TableCell>{decision.decidedOn}</TableCell>
-                <TableCell>{getStatusBadge(decision.status)}</TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
       </Card>

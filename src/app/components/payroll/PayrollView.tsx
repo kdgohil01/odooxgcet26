@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
-import { Download, DollarSign } from "lucide-react";
+import { Input } from "../ui/input";
+import { Download, DollarSign, Search } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -10,167 +12,258 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { toast } from "sonner";
+import { generatePayslipPDF, generateTaxDocumentPDF, type PayslipData, type TaxDocumentData } from "../../utils/pdfGenerator";
+import { useProfileContext } from "../../context/ProfileContext";
+import { useAuth } from "../../context/AuthContext";
+import { getEmployeePayroll, type EnhancedPayrollRecord } from "../../utils/payrollStorage";
 
 export function PayrollView() {
-  const handleDownloadPayslip = (period?: string) => {
-    if (period) {
-      toast.success(`Downloading payslip for ${period}...`);
-    } else {
-      toast.success("Downloading current payslip...");
-    }
-  };
-
-  const handleDownloadTaxDoc = (docName: string) => {
-    toast.success(`Downloading ${docName}...`);
-  };
-
-  const currentPayroll = {
-    period: "December 2025",
-    payDate: "December 28, 2025",
-    grossSalary: 6000,
-    deductions: {
-      tax: 900,
-      insurance: 250,
-      pension: 300,
-      other: 50,
+  const [searchTerm, setSearchTerm] = useState("");
+  const [yearFilter, setYearFilter] = useState("all");
+  const { profile } = useProfileContext();
+  const { currentUser } = useAuth();
+  
+  // Get employee payroll data (read-only for employees)
+  const employeePayroll = getEmployeePayroll(currentUser?.employeeId || '');
+  
+  // Get current payroll record for display
+  const currentPayroll: EnhancedPayrollRecord = employeePayroll || {
+    id: 0,
+    employeeId: '',
+    employee: "Not Available",
+    email: '',
+    phone: '',
+    department: '',
+    position: '',
+    hireDate: '',
+    salaryStructure: {
+      basic: 0,
+      housing: 0,
+      transport: 0,
+      medical: 0,
+      other: 0
     },
-    netSalary: 4500,
+    deductions: {
+      tax: 0,
+      insurance: 0,
+      providentFund: 0,
+      other: 0
+    },
+    gross: 0,
+    net: 0,
+    status: 'NA',
+    paymentDate: '',
+    processedBy: '',
+    lastUpdated: ''
   };
 
-  const payrollHistory = [
-    { period: "November 2025", payDate: "Nov 28, 2025", gross: 6000, deductions: 1500, net: 4500 },
-    { period: "October 2025", payDate: "Oct 28, 2025", gross: 6000, deductions: 1500, net: 4500 },
-    { period: "September 2025", payDate: "Sep 28, 2025", gross: 6000, deductions: 1500, net: 4500 },
-    { period: "August 2025", payDate: "Aug 28, 2025", gross: 6000, deductions: 1500, net: 4500 },
-  ];
+  const handleDownloadPayslip = (period?: string, record?: any) => {
+    const payrollData = record || currentPayroll;
+    
+    // Calculate breakdown
+    const grossSalary = currentPayroll.gross;
+    const totalDeductions = currentPayroll.deductions.tax + 
+                          currentPayroll.deductions.insurance + 
+                          currentPayroll.deductions.providentFund + 
+                          currentPayroll.deductions.other;
+    const basicSalary = grossSalary * 0.6;
+    const housingAllowance = grossSalary * 0.2;
+    const transportAllowance = grossSalary * 0.15;
+    const otherAllowances = grossSalary * 0.05;
+    const tax = grossSalary * 0.15;
+    const insurance = grossSalary * 0.04;
+    const pension = grossSalary * 0.05;
+    const otherDeductions = totalDeductions - tax - insurance - pension;
 
-  const ytdSummary = {
-    totalGross: 72000,
-    totalDeductions: 18000,
-    totalNet: 54000,
-    avgMonthly: 4500,
+    const payslipData: PayslipData = {
+      employeeName: employeePayroll.employee,
+      employeeId: employeePayroll.employeeId,
+      department: employeePayroll.department,
+      position: employeePayroll.position,
+      email: employeePayroll.email,
+      month: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      gross: employeePayroll.gross,
+      basicSalary: employeePayroll.salaryStructure.basic,
+      housingAllowance: employeePayroll.salaryStructure.housing,
+      transportAllowance: employeePayroll.salaryStructure.transport,
+      otherAllowances: employeePayroll.salaryStructure.other,
+      tax: employeePayroll.deductions.tax,
+      insurance: employeePayroll.deductions.insurance,
+      pension: employeePayroll.deductions.providentFund,
+      otherDeductions: employeePayroll.deductions.other,
+      netSalary: employeePayroll.net
+    };
+    
+    generatePayslipPDF(payslipData);
+    toast.success("Payslip downloaded successfully");
   };
+
+  const filteredRecords = employeePayroll ? [employeePayroll] : [];
 
   return (
     <div className="p-8 space-y-6">
-      {/* Current Payroll */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-foreground">Current Payroll</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {currentPayroll.period} • Paid on {currentPayroll.payDate}
-            </p>
-          </div>
-          <Button variant="outline" onClick={() => handleDownloadPayslip()}>
-            <Download className="w-4 h-4 mr-2" />
-            Download Payslip
-          </Button>
+          <h2 className="text-xl text-foreground">My Payroll</h2>
+          <p className="text-sm text-muted-foreground">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
         </div>
+        
+        {employeePayroll.status === 'NA' && (
+          <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-6">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600" />
+              <div>
+                <p className="font-medium text-yellow-800">No Payroll Data Available</p>
+                <p className="text-sm text-yellow-700">
+                  Your payroll information is not yet available. Please contact your HR administrator to set up your salary structure.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-4 bg-muted rounded">
-            <p className="text-sm text-muted-foreground">Gross Salary</p>
-            <p className="text-2xl text-foreground mt-2">
-              ${currentPayroll.grossSalary.toLocaleString()}
-            </p>
-          </div>
-          <div className="p-4 bg-muted rounded">
-            <p className="text-sm text-muted-foreground">Total Deductions</p>
-            <p className="text-2xl text-foreground mt-2">
-              ${Object.values(currentPayroll.deductions).reduce((a, b) => a + b, 0).toLocaleString()}
-            </p>
-          </div>
-          <div className="p-4 bg-primary/10 rounded">
-            <p className="text-sm text-primary">Net Salary</p>
-            <p className="text-2xl text-primary mt-2">
-              ${currentPayroll.netSalary.toLocaleString()}
-            </p>
-          </div>
-        </div>
+        {employeePayroll.status !== 'NA' && (
+          <>
+            {/* Payroll Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Basic Salary</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.salaryStructure.basic.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Housing Allowance</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.salaryStructure.housing.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Transport Allowance</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.salaryStructure.transport.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Other Allowances</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.salaryStructure.other.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-primary/10 rounded-lg">
+                <p className="text-sm text-primary">Total Gross</p>
+                <p className="text-2xl text-primary">
+                  ${employeePayroll.gross.toLocaleString()}
+                </p>
+              </div>
+            </div>
 
-        <div className="mt-6 pt-6 border-t border-border">
-          <h4 className="text-sm text-muted-foreground mb-4">Deduction Breakdown</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Income Tax</p>
-              <p className="text-foreground mt-1">${currentPayroll.deductions.tax}</p>
+            {/* Deductions Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Tax</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.deductions.tax.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Insurance</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.deductions.insurance.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Provident Fund</p>
+                <p className="text-2xl text-foreground">
+                  ${employeePayroll.deductions.providentFund.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">Total Deductions</p>
+                <p className="text-2xl text-red-700">
+                  ${(employeePayroll.deductions.tax + employeePayroll.deductions.insurance + employeePayroll.deductions.providentFund + employeePayroll.deductions.other).toLocaleString()}
+                </p>
+              </div>
+              <div className="p-4 bg-primary/10 rounded-lg">
+                <p className="text-sm text-primary">Net Salary</p>
+                <p className="text-2xl text-primary">
+                  ${employeePayroll.net.toLocaleString()}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Health Insurance</p>
-              <p className="text-foreground mt-1">${currentPayroll.deductions.insurance}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Pension</p>
-              <p className="text-foreground mt-1">${currentPayroll.deductions.pension}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Other</p>
-              <p className="text-foreground mt-1">${currentPayroll.deductions.other}</p>
-            </div>
-          </div>
-        </div>
-      </Card>
 
-      {/* YTD Summary */}
-      <Card className="p-6">
-        <h3 className="mb-4 text-foreground">Year-to-Date Summary (2025)</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <p className="text-sm text-muted-foreground">Total Gross</p>
-            <p className="text-2xl text-foreground mt-2">
-              ${ytdSummary.totalGross.toLocaleString()}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Total Deductions</p>
-            <p className="text-2xl text-foreground mt-2">
-              ${ytdSummary.totalDeductions.toLocaleString()}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Total Net</p>
-            <p className="text-2xl text-primary mt-2">
-              ${ytdSummary.totalNet.toLocaleString()}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Avg. Monthly</p>
-            <p className="text-2xl text-foreground mt-2">
-              ${ytdSummary.avgMonthly.toLocaleString()}
-            </p>
-          </div>
-        </div>
+            {/* Actions */}
+            <div className="flex justify-between items-center">
+              <Button onClick={handleDownloadPayslip} className="flex items-center gap-2">
+                <Download className="w-4 h-4" />
+                Download Payslip
+              </Button>
+            </div>
+          </>
+        )}
       </Card>
 
       {/* Payroll History */}
       <Card className="p-6">
-        <h3 className="mb-4 text-foreground">Payroll History</h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-medium text-foreground">Payroll History</h3>
+          <div className="flex gap-2">
+            <Input
+              placeholder="Search payroll records..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="max-w-sm"
+            />
+            <Select value={yearFilter} onValueChange={setYearFilter}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Select Year" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Years</SelectItem>
+                <SelectItem value="2024">2024</SelectItem>
+                <SelectItem value="2023">2023</SelectItem>
+                <SelectItem value="2022">2022</SelectItem>
+                <SelectItem value="2021">2021</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Period</TableHead>
-              <TableHead>Pay Date</TableHead>
-              <TableHead>Gross Salary</TableHead>
+              <TableHead>Basic Salary</TableHead>
+              <TableHead>Allowances</TableHead>
+              <TableHead>Gross</TableHead>
               <TableHead>Deductions</TableHead>
-              <TableHead>Net Salary</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Net</TableHead>
+              <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {payrollHistory.map((record, index) => (
-              <TableRow key={index}>
-                <TableCell>{record.period}</TableCell>
-                <TableCell>{record.payDate}</TableCell>
+            {filteredRecords.map((record) => (
+              <TableRow key={record.id}>
+                <TableCell>{record.paymentDate || 'Not Available'}</TableCell>
+                <TableCell>${record.salaryStructure.basic.toLocaleString()}</TableCell>
+                <TableCell>${(record.salaryStructure.housing + record.salaryStructure.transport + record.salaryStructure.other).toLocaleString()}</TableCell>
                 <TableCell>${record.gross.toLocaleString()}</TableCell>
-                <TableCell>${record.deductions.toLocaleString()}</TableCell>
+                <TableCell>${(record.deductions.tax + record.deductions.insurance + record.deductions.providentFund + record.deductions.other).toLocaleString()}</TableCell>
                 <TableCell>${record.net.toLocaleString()}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="outline" size="sm" onClick={() => handleDownloadPayslip(record.period)}>
-                    <Download className="w-3 h-3 mr-2" />
-                    Download
-                  </Button>
+                <TableCell>
+                  <Badge className={record.status === 'processed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}>
+                    {record.status}
+                  </Badge>
                 </TableCell>
               </TableRow>
             ))}
